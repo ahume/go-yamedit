@@ -1,6 +1,8 @@
 package yamedit
 
 import (
+	"fmt"
+	"log"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -17,11 +19,22 @@ func Get(YAML []byte, path []string) string {
 
 	jq := jsonq.NewQuery(data)
 
-	result, err := jq.String(path...)
+	r, err := jq.Interface(path...)
 	if err != nil {
-		panic("The requested path cannot be found.")
+		log.Fatal("The requested path cannot be found.", err)
 	}
 
+	var result string
+	switch v := r.(type) {
+	case int:
+		result = strconv.Itoa(r.(int))
+	case float64:
+		result = fmt.Sprintf("%g", r)
+	case string:
+		result = r.(string)
+	default:
+		log.Fatalf("Unexpected type found at path: %s", v)
+	}
 	return result
 }
 
