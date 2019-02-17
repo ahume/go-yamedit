@@ -46,7 +46,7 @@ func Edit(YAML []byte, path []string, newValue string) []byte {
 	matchToken := "matchToken" + getUUID()
 	matchIndex := 0
 
-	reMatchAllKeyValuePairs, _ := regexp.Compile(finalProp + " *: *" + currentValue)
+	reMatchAllKeyValuePairs, _ := regexp.Compile(finalProp + " *: *\"?" + currentValue + "\"?")
 	reMatchAllKeyTokenPairs, _ := regexp.Compile(finalProp + " *: *" + matchToken + "\\d+")
 
 	// IF 2nd last converts to int it's an array
