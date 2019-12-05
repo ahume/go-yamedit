@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -38,37 +37,33 @@ func Get(YAML []byte, path []string) string {
 	return result
 }
 
-// Edit the string value in the YAML from the given path
 func Edit(YAML []byte, path []string, newValue string) []byte {
-	currentValue := Get(YAML, path)
-	finalProp := path[len(path)-1]
+	var data map[string]interface{}
 
-	matchToken := "matchToken" + getUUID()
-	matchIndex := 0
-
-	reMatchAllKeyValuePairs, _ := regexp.Compile(finalProp + " *: *\"?" + currentValue + "\"?")
-	reMatchAllKeyTokenPairs, _ := regexp.Compile(finalProp + " *: *" + matchToken + "\\d+")
-
-	// IF 2nd last converts to int it's an array
-	if targetIsArrayMember(YAML, path) {
-		r, _ := regexp.Compile("- *" + currentValue)
-		return r.ReplaceAll(YAML, []byte("- "+newValue))
+	fmt.Printf("%s\n", YAML)
+	if err := yaml.Unmarshal(YAML, &data); err != nil {
+		return YAML
 	}
 
-	tokenisedYAML := reMatchAllKeyValuePairs.ReplaceAllFunc(YAML, func(s []byte) []byte {
-		matchIndex = matchIndex + 1
-		return []byte(finalProp + ": " + matchToken + strconv.Itoa(matchIndex))
-	})
+	fmt.Println(data)
 
-	reMatchTargetKeyToken, _ := regexp.Compile(finalProp + " *: *" + Get(tokenisedYAML, path))
+	pointer := data
 
-	// Switch matching token to the new value
-	YAMLWithNewValue := reMatchTargetKeyToken.ReplaceAll(tokenisedYAML, []byte(finalProp+": "+newValue))
+	for _, s := range path {
+		if d, ok := pointer[s].(map[string]interface{}); ok {
+			pointer = d
+		}
+	}
 
-	// Switch all remaining matchTokens back to their original values
-	YAMLWithNewValue = reMatchAllKeyTokenPairs.ReplaceAll(YAMLWithNewValue, []byte(finalProp+": "+currentValue))
+	pointer[path[len(path)-1]] = newValue
 
-	return YAMLWithNewValue
+	b, err := yaml.Marshal(data)
+
+	if err != nil {
+		return YAML
+	}
+
+	return b
 }
 
 func getUUID() string {
