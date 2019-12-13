@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/ghodss/yaml"
 	"github.com/jmoiron/jsonq"
+	"gopkg.in/yaml.v3"
 )
 
 // Get the string value from the YAML from the given path
@@ -37,33 +38,39 @@ func Get(YAML []byte, path []string) string {
 	return result
 }
 
+// Edit the string value in the YAML from the given path
 func Edit(YAML []byte, path []string, newValue string) []byte {
-	var data map[string]interface{}
+	currentValue := Get(YAML, path)
+	finalProp := path[len(path)-1]
 
-	fmt.Printf("%s\n", YAML)
-	if err := yaml.Unmarshal(YAML, &data); err != nil {
-		return YAML
+	matchToken := "matchToken" + getUUID()
+	matchIndex := 0
+
+	reMatchAllKeyValuePairs, _ := regexp.Compile(finalProp + " *: *\"?" + currentValue + "\"?")
+	reMatchAllKeyTokenPairs, _ := regexp.Compile(finalProp + " *: *" + matchToken + "\\d+")
+
+	// IF 2nd last converts to int it's an array
+	if targetIsArrayMember(YAML, path) {
+		r, _ := regexp.Compile("- *" + currentValue)
+		return r.ReplaceAll(YAML, []byte("- "+newValue))
 	}
 
-	fmt.Println(data)
+	tokenisedYAML := reMatchAllKeyValuePairs.ReplaceAllFunc(YAML, func(s []byte) []byte {
+		matchIndex = matchIndex + 1
+		return []byte(finalProp + ": " + matchToken + strconv.Itoa(matchIndex))
+	})
 
-	pointer := data
+	split := strings.Fields(finalProp + " : .? " + Get(tokenisedYAML, path))
+	newS := strings.Join(split, "\\s*")
+	reMatchTargetKeyToken, _ := regexp.Compile(newS)
 
-	for _, s := range path {
-		if d, ok := pointer[s].(map[string]interface{}); ok {
-			pointer = d
-		}
-	}
+	// Switch matching token to the new value
+	YAMLWithNewValue := reMatchTargetKeyToken.ReplaceAll(tokenisedYAML, []byte(finalProp+": "+newValue))
 
-	pointer[path[len(path)-1]] = newValue
+	// Switch all remaining matchTokens back to their original values
+	YAMLWithNewValue = reMatchAllKeyTokenPairs.ReplaceAll(YAMLWithNewValue, []byte(finalProp+": "+currentValue))
 
-	b, err := yaml.Marshal(data)
-
-	if err != nil {
-		return YAML
-	}
-
-	return b
+	return YAMLWithNewValue
 }
 
 func getUUID() string {
