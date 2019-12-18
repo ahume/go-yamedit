@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ghodss/yaml"
 	"github.com/jmoiron/jsonq"
+	"gopkg.in/yaml.v3"
 )
 
 // Get the string value from the YAML from the given path
@@ -60,7 +60,9 @@ func Edit(YAML []byte, path []string, newValue string) []byte {
 		return []byte(finalProp + ": " + matchToken + strconv.Itoa(matchIndex))
 	})
 
-	reMatchTargetKeyToken, _ := regexp.Compile(finalProp + " *: *" + Get(tokenisedYAML, path))
+	split := strings.Fields(finalProp + " : .? " + Get(tokenisedYAML, path))
+	newS := strings.Join(split, "\\s*")
+	reMatchTargetKeyToken, _ := regexp.Compile(newS)
 
 	// Switch matching token to the new value
 	YAMLWithNewValue := reMatchTargetKeyToken.ReplaceAll(tokenisedYAML, []byte(finalProp+": "+newValue))
