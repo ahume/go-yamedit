@@ -8,20 +8,24 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jmoiron/jsonq"
+	"github.com/qri-io/jsonpointer"
 	"gopkg.in/yaml.v3"
 )
 
 // Get the string value from the YAML from the given path
-func Get(YAML []byte, path []string) string {
+func Get(YAML []byte, path string) (string, error) {
 	var data map[string]interface{}
-	yaml.Unmarshal(YAML, &data)
+	if err := yaml.Unmarshal(YAML, &data); err != nil {
+		return "", err
+	}
 
-	jq := jsonq.NewQuery(data)
-
-	r, err := jq.Interface(path...)
+	ptr, err := jsonpointer.Parse(path)
 	if err != nil {
-		log.Fatal("The requested path cannot be found.", err)
+		return "", err
+	}
+	r, err := ptr.Eval(data)
+	if err != nil {
+		return "", err
 	}
 
 	var result string
@@ -35,24 +39,34 @@ func Get(YAML []byte, path []string) string {
 	default:
 		log.Fatalf("Unexpected type found at path: %s", v)
 	}
-	return result
+	return result, nil
 }
 
 // Edit the string value in the YAML from the given path
-func Edit(YAML []byte, path []string, newValue string) []byte {
-	currentValue := Get(YAML, path)
-	finalProp := path[len(path)-1]
+func Edit(YAML []byte, path, newValue string) ([]byte, error) {
+	currentValue, err := Get(YAML, path)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	splitPath := strings.Split(path, "/")
+	finalProp := unescapeJSONPointerString(splitPath[len(splitPath)-1])
+	regexEscapedFinalProp := escapePathStringForRegex(finalProp)
 
 	matchToken := "matchToken" + getUUID()
 	matchIndex := 0
 
-	reMatchAllKeyValuePairs, _ := regexp.Compile(finalProp + " *: *\"?" + currentValue + "\"?")
-	reMatchAllKeyTokenPairs, _ := regexp.Compile(finalProp + " *: *" + matchToken + "\\d+")
+	reMatchAllKeyValuePairs, _ := regexp.Compile(regexEscapedFinalProp + " *: *\"?" + currentValue + "\"?")
+	reMatchAllKeyTokenPairs, _ := regexp.Compile(regexEscapedFinalProp + " *: *" + matchToken + "\\d+")
 
-	// IF 2nd last converts to int it's an array
-	if targetIsArrayMember(YAML, path) {
+	// BUG: This is a shortcut with a significant bug. We detect if the value we're
+	// looking for is a value member of an array, and if it is, we swap it directly
+	// and return. However, because this is a global replace, if there are any
+	// other arrays which have the same value in the same position, they will also
+	// be changed and returned in the updated YAML string.
+	if targetIsArrayMember(splitPath) {
 		r, _ := regexp.Compile("- *" + currentValue)
-		return r.ReplaceAll(YAML, []byte("- "+newValue))
+		return r.ReplaceAll(YAML, []byte("- "+newValue)), nil
 	}
 
 	tokenisedYAML := reMatchAllKeyValuePairs.ReplaceAllFunc(YAML, func(s []byte) []byte {
@@ -60,7 +74,8 @@ func Edit(YAML []byte, path []string, newValue string) []byte {
 		return []byte(finalProp + ": " + matchToken + strconv.Itoa(matchIndex))
 	})
 
-	split := strings.Fields(finalProp + " : .? " + Get(tokenisedYAML, path))
+	g, _ := Get(tokenisedYAML, path)
+	split := strings.Fields(finalProp + " : .? " + g)
 	newS := strings.Join(split, "\\s*")
 	reMatchTargetKeyToken, _ := regexp.Compile(newS)
 
@@ -70,7 +85,7 @@ func Edit(YAML []byte, path []string, newValue string) []byte {
 	// Switch all remaining matchTokens back to their original values
 	YAMLWithNewValue = reMatchAllKeyTokenPairs.ReplaceAll(YAMLWithNewValue, []byte(finalProp+": "+currentValue))
 
-	return YAMLWithNewValue
+	return YAMLWithNewValue, nil
 }
 
 func getUUID() string {
@@ -81,17 +96,26 @@ func getUUID() string {
 	return strings.TrimSpace(string(out))
 }
 
-func targetIsArrayMember(YAML []byte, path []string) bool {
-	var data map[string]interface{}
-	yaml.Unmarshal(YAML, &data)
-
-	newPath := path[:len(path)-1]
-
-	jq := jsonq.NewQuery(data)
-
-	_, err := jq.Array(newPath...)
-	if err != nil {
-		return false
+func targetIsArrayMember(path []string) bool {
+	lastValue := path[len(path)-1]
+	if _, err := strconv.Atoi(lastValue); err == nil {
+		return true
 	}
-	return true
+	return false
+}
+
+// escapePathStringForRegex ensures that all regex metacharacters are escaped.
+// This allows for keys with regex characters e.g. "a.b.c/hello" to sill be
+// found for tokenisation.
+func escapePathStringForRegex(value string) string {
+	return regexp.QuoteMeta(value)
+}
+
+// unescapePointerString removes the special case escapeing used in
+// the Pointer spec. https://stackoverflow.com/questions/31483170/purpose-of-tilde-in-json-pointer
+func unescapeJSONPointerString(value string) string {
+	newValue := value
+	newValue = strings.ReplaceAll(newValue, "~0", "~")
+	newValue = strings.ReplaceAll(newValue, "~1", "/")
+	return newValue
 }
