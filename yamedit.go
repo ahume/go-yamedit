@@ -56,7 +56,7 @@ func Edit(YAML []byte, path, newValue string) ([]byte, error) {
 	matchToken := "matchToken" + getUUID()
 	matchIndex := 0
 
-	reMatchAllKeyValuePairs, _ := regexp.Compile(regexEscapedFinalProp + " *: *\"?" + currentValue + "\"?")
+	reMatchAllKeyValuePairs, _ := regexp.Compile(regexEscapedFinalProp + " *: *(\"|')?" + currentValue + "(\"|')?")
 	reMatchAllKeyTokenPairs, _ := regexp.Compile(regexEscapedFinalProp + " *: *" + matchToken + "\\d+")
 
 	// BUG: This is a shortcut with a significant bug. We detect if the value we're
