@@ -41,6 +41,7 @@ func TestGet(t *testing.T) {
 func TestEdit(t *testing.T) {
 	yaml := `foo:
   bar: you
+  image: 'eu.gcr.io/a/path-to-a-thing'
   anno:
     a.b.c/123: right
   data:
@@ -60,6 +61,7 @@ func TestEdit(t *testing.T) {
 	}{
 		{path: "/foo/bar", newValue: "fool", want: `foo:
   bar: fool
+  image: 'eu.gcr.io/a/path-to-a-thing'
   anno:
     a.b.c/123: right
   data:
@@ -73,6 +75,7 @@ func TestEdit(t *testing.T) {
     foo: bar`},
 		{path: "/foo/brain/1", newValue: "fool", want: `foo:
   bar: you
+  image: 'eu.gcr.io/a/path-to-a-thing'
   anno:
     a.b.c/123: right
   data:
@@ -86,6 +89,7 @@ func TestEdit(t *testing.T) {
     foo: bar`},
 		{path: "/foo/brain/2/foo", newValue: "fool", want: `foo:
   bar: you
+  image: 'eu.gcr.io/a/path-to-a-thing'
   anno:
     a.b.c/123: right
   data:
@@ -99,6 +103,7 @@ func TestEdit(t *testing.T) {
     foo: fool`},
 		{path: "/foo/anno/a.b.c~1123", newValue: "left", want: `foo:
   bar: you
+  image: 'eu.gcr.io/a/path-to-a-thing'
   anno:
     a.b.c/123: left
   data:
@@ -113,11 +118,26 @@ func TestEdit(t *testing.T) {
 		{path: "/foo/data/config.json", newValue: `>
       {"ok":"then"}`, want: `foo:
   bar: you
+  image: 'eu.gcr.io/a/path-to-a-thing'
   anno:
     a.b.c/123: right
   data:
     config.json: >
       {"ok":"then"}
+  brain:
+  - zero
+  - one
+  - two:
+    foo: bar`},
+		{path: "/foo/image", newValue: "'eu.gcr.io/a/path-to-another-thing'", want: `foo:
+  bar: you
+  image: 'eu.gcr.io/a/path-to-another-thing'
+  anno:
+    a.b.c/123: right
+  data:
+    config.json: |
+      line1
+      line2
   brain:
   - zero
   - one
